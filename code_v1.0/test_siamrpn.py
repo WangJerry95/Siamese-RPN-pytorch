@@ -91,11 +91,11 @@ def main():
         if not os.path.exists(d):
             os.makedirs(d)
 
-        detection = ret['detection_cropped_resized']
+        detection = ret['detection_cropped_transformed']
         save_path = os.path.join(ret['tmp_dir'], '6_pred_proposals', '{:04d}_1_detection.jpg'.format(example))
         detection.save(save_path)
 
-        template = ret['template_cropped_resized']
+        template = ret['template_cropped_transformed']
         save_path = os.path.join(ret['tmp_dir'], '6_pred_proposals', '{:04d}_0_template.jpg'.format(example))
         template.save(save_path)
 
@@ -108,7 +108,7 @@ def main():
         """ save detection template proposals"""
 
 
-        save_path = os.path.join(ret['tmp_dir'], '6_pred_proposals', '{:04d}_2_proposals.jpg'.format(example))
+        save_path = os.path.join(ret['tmp_dir'], '6_pred_proposals', '{:04d}_proposals.jpg'.format(example))
         detection.save(save_path)
 
         print('save at {}'.format(save_path))

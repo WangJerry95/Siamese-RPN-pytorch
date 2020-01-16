@@ -22,7 +22,7 @@ class Anchor_ms(object):
     def __init__(self, feature_w, feature_h):
         self.w      = feature_w
         self.h      = feature_h
-        self.base   = 64                   # base size for anchor box
+        self.base   = 120                  # base size for anchor box
         self.stride = 15                   # center point shift stride
         self.scale  = [1/3, 1/2, 1, 2, 3]  # aspect ratio
         self.anchors= self.gen_anchors()   # xywh
@@ -142,8 +142,10 @@ class TrainDataLoader(object):
 
     def get_transform_for_train(self):
         transform_list = []
-        transform_list.append(transforms.ToTensor())
-        transform_list.append(transforms.Normalize(mean=(0.5,0.5,0.5), std=(0.5,0.5,0.5)))
+        transform_list.append(transforms.ColorJitter(0.2, 0.2, 0.2, 0.2))
+        transform_list.append(transforms.RandomGrayscale(p=0.2))
+        # transform_list.append(transforms.ToTensor())
+        # transform_list.append(transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)))
         return transforms.Compose(transform_list)
 
     # tuple  
@@ -164,7 +166,7 @@ class TrainDataLoader(object):
         assert index_of_subclass < len(self.sub_class_dir), 'index_of_subclass should less than total classes'
         sub_class_dir_basename = self.sub_class_dir[index_of_subclass]
         sub_class_dir_path = os.path.join(self.img_dir_path, sub_class_dir_basename)
-        sub_class_img_name = [img_name for img_name in os.listdir(sub_class_dir_path) if not img_name.find('.jpg') == -1]        
+        sub_class_img_name = [img_name for img_name in os.listdir(sub_class_dir_path) if not img_name.find('.png') == -1]
         sub_class_img_name = sorted(sub_class_img_name)
         sub_class_img_num  = len(sub_class_img_name)
         sub_class_gt_name  = 'groundtruth.txt'
@@ -176,17 +178,25 @@ class TrainDataLoader(object):
             if self.max_inter >= sub_class_img_num-1:
                 self.max_inter = sub_class_img_num//2
 
-            template_index = np.clip(random.choice(range(0, max(1, sub_class_img_num - self.max_inter))), 0, sub_class_img_num-1)
-            detection_index= np.clip(random.choice(range(1, max(2, self.max_inter))) + template_index, 0, sub_class_img_num-1)
-
+            # template_index = np.clip(random.choice(range(0, max(1, sub_class_img_num - self.max_inter))), 0, sub_class_img_num-1)
+            # detection_index= np.clip(random.choice(range(1, max(2, self.max_inter))) + template_index, 0, sub_class_img_num-1)
+            template_index = 0
+            detection_index = 1
             template_name, detection_name  = sub_class_img_name[template_index], sub_class_img_name[detection_index]
             template_img_path, detection_img_path = osp.join(sub_class_dir_path, template_name), osp.join(sub_class_dir_path, detection_name)
-            gt_path = osp.join(sub_class_dir_path, sub_class_gt_name)
-            with open(gt_path, 'r') as f:
-                lines = f.readlines()
-            cords_of_template_abs  = [abs(int(float(i))) for i in lines[template_index].strip('\n').split(',')[:4]]
-            cords_of_detection_abs = [abs(int(float(i))) for i in lines[detection_index].strip('\n').split(',')[:4]]
-            
+            # gt_path = osp.join(sub_class_dir_path, sub_class_gt_name)
+            # with open(gt_path, 'r') as f:
+            #     lines = f.readlines()
+            # cords_of_template_abs  = [abs(int(float(i))) for i in lines[template_index].strip('\n').split(',')[:4]]
+            # cords_of_detection_abs = [abs(int(float(i))) for i in lines[detection_index].strip('\n').split(',')[:4]]
+
+            # randomly choose a template area
+            target_w = random.uniform(100, 150)
+            target_h = random.uniform(100, 150)
+            target_x = random.uniform(0, 320 - target_w)
+            target_y = random.uniform(0, 240 - target_h)
+            cords_of_template_abs = [target_x, target_y, target_w, target_h]
+            cords_of_detection_abs = cords_of_template_abs
             if cords_of_template_abs[2]*cords_of_template_abs[3]*cords_of_detection_abs[2]*cords_of_detection_abs[3] != 0: 
                 status = False
             else:
@@ -195,8 +205,10 @@ class TrainDataLoader(object):
         # load infomation of template and detection
         self.ret['template_img_path']      = template_img_path
         self.ret['detection_img_path']     = detection_img_path
-        self.ret['template_target_x1y1wh'] = [int(float(i)) for i in lines[template_index].strip('\n').split(',')[:4]]
-        self.ret['detection_target_x1y1wh']= [int(float(i)) for i in lines[detection_index].strip('\n').split(',')[:4]]
+        # self.ret['template_target_x1y1wh'] = [int(float(i)) for i in lines[template_index].strip('\n').split(',')[:4]]
+        # self.ret['detection_target_x1y1wh']= [int(float(i)) for i in lines[detection_index].strip('\n').split(',')[:4]]
+        self.ret['template_target_x1y1wh'] = cords_of_template_abs
+        self.ret['detection_target_x1y1wh'] = cords_of_detection_abs
         t1, t2 = self.ret['template_target_x1y1wh'].copy(), self.ret['detection_target_x1y1wh'].copy()
         self.ret['template_target_xywh'] = np.array([t1[0]+t1[2]//2, t1[1]+t1[3]//2, t1[2], t1[3]], np.float32)
         self.ret['detection_target_xywh']= np.array([t2[0]+t2[2]//2, t2[1]+t2[3]//2, t2[2], t2[3]], np.float32)
@@ -229,13 +241,15 @@ class TrainDataLoader(object):
 
         w, h = template_img.size
         cx, cy, tw, th = self.ret['template_target_xywh']
-        p = round((tw + th)/2, 2)
-        template_square_size  = int(np.sqrt((tw + p)*(th + p))) #a
+        # p = round((tw + th)/2, 2)
+        # template_square_size  = int(np.sqrt((tw + p)*(th + p))) #a
+        template_square_size = int(max(tw, th))  # do not expand too much
         detection_square_size = int(template_square_size * 2)   #A =2a
         
         # pad
-        detection_lt_x, detection_lt_y = cx - detection_square_size//2, cy - detection_square_size//2
-        detection_rb_x, detection_rb_y = cx + detection_square_size//2, cy + detection_square_size//2
+        offset = [random.uniform(-32, 32), random.uniform(-32, 32)]  # offset of the search area center from the target center
+        detection_lt_x, detection_lt_y = cx - detection_square_size//2 + offset[0], cy - detection_square_size//2 + offset[1]
+        detection_rb_x, detection_rb_y = cx + detection_square_size//2 + offset[0], cy + detection_square_size//2 + offset[1]
         left   = -detection_lt_x if detection_lt_x < 0 else 0
         top    = -detection_lt_y if detection_lt_y < 0 else 0
         right  =  detection_rb_x - w if detection_rb_x > w else 0
@@ -251,20 +265,20 @@ class TrainDataLoader(object):
             
         # crop
         tl = cx + left - template_square_size//2
-        tt = cy + top  - template_square_size//2
+        tt = cy + top - template_square_size//2
         tr = new_w - tl - template_square_size
         tb = new_h - tt - template_square_size
         self.ret['template_cropped'] = ImageOps.crop(self.ret['new_template_img_padding'].copy(), (tl, tt, tr, tb))
 
-        dl = np.clip(cx + left - detection_square_size//2, 0, new_w - detection_square_size)
-        dt = np.clip(cy + top  - detection_square_size//2, 0, new_h - detection_square_size)
+        dl = np.clip(cx + left - detection_square_size//2 + offset[0], 0, new_w - detection_square_size)
+        dt = np.clip(cy + top  - detection_square_size//2 + offset[1], 0, new_h - detection_square_size)
         dr = np.clip(new_w - dl - detection_square_size, 0, new_w - detection_square_size)
         db = np.clip(new_h - dt - detection_square_size, 0, new_h - detection_square_size ) 
         self.ret['detection_cropped']= ImageOps.crop(self.ret['new_detection_img_padding'].copy(), (dl, dt, dr, db))  
 
-        self.ret['detection_tlcords_of_original_image'] = (cx - detection_square_size//2 , cy - detection_square_size//2)
-        self.ret['detection_tlcords_of_padding_image']  = (cx - detection_square_size//2 + left, cy - detection_square_size//2 + top)
-        self.ret['detection_rbcords_of_padding_image']  = (cx + detection_square_size//2 + left, cy + detection_square_size//2 + top)
+        self.ret['detection_tlcords_of_original_image'] = (cx - detection_square_size//2 + offset[0] , cy - detection_square_size//2 + offset[1])
+        self.ret['detection_tlcords_of_padding_image']  = (cx - detection_square_size//2 + left + offset[0], cy - detection_square_size//2 + top + offset[1])
+        self.ret['detection_rbcords_of_padding_image']  = (cx + detection_square_size//2 + left + offset[0], cy + detection_square_size//2 + top + offset[1])
         
         # resize
         self.ret['template_cropped_resized'] = self.ret['template_cropped'].copy().resize((127, 127))
@@ -417,8 +431,17 @@ class TrainDataLoader(object):
         pos_neg_diff = self.ret['pos_neg_diff'].copy()
 
         transform = self.get_transform_for_train()
-        template_tensor = transform(template_pil)
-        detection_tensor= transform(detection_pil)
+        template = transform(template_pil)
+        detection = transform(detection_pil)
+        template_affine = transforms.RandomAffine(10, None, (0.9, 1.1), 10, fillcolor=(127,127,127))(template)
+        self.ret['template_cropped_transformed'] = template_affine
+        self.ret['detection_cropped_transformed'] = detection
+
+        Normalize = transforms.Compose([transforms.ToTensor(),
+                                        transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))])
+        template_tensor = Normalize(template_affine)
+        detection_tensor = Normalize(detection)
+
         self.ret['template_tensor'] = template_tensor.unsqueeze(0)
         self.ret['detection_tensor']= detection_tensor.unsqueeze(0)
         self.ret['pos_neg_diff_tensor'] = torch.Tensor(pos_neg_diff)

@@ -23,9 +23,9 @@ from shapely.geometry import Polygon
 
 parser = argparse.ArgumentParser(description='PyTorch SiameseRPN Training')
 
-parser.add_argument('--train_path', default='/home/song/srpn/dataset/vot13', metavar='DIR',help='path to dataset')
+parser.add_argument('--train_path', default='../datasets/vot13', metavar='DIR',help='path to dataset')
 
-parser.add_argument('--weight_dir', default='/home/song/srpn/weight', metavar='DIR',help='path to weight')
+parser.add_argument('--weight_dir', default='../weights', metavar='DIR',help='path to weight')
 
 parser.add_argument('--checkpoint_path', default=None, help='resume')
 
@@ -46,7 +46,7 @@ parser.add_argument('--debug', default=False, type=bool,  help='whether to debug
 def main():
     """ train dataloader """
     args = parser.parse_args()
-    data_loader = TrainDataLoader(args.train_path, check = args.debug)
+    data_loader = TrainDataLoader(args.train_path, check=args.debug)
     if not os.path.exists(args.weight_dir):
         os.makedirs(args.weight_dir)
 
@@ -112,146 +112,153 @@ def main():
             cout = cout.cpu().detach().numpy()
             score = 1/(1 + np.exp(cout[:,0]-cout[:,1]))
 
-            # ++++++++++++ post process below just for debug ++++++++++++++++++++++++
-            # ++++++++++++++++++++ v1.0 add penalty +++++++++++++++++++++++++++++++++
-            if ret['pos_anchors'] is not None:
-                penalty_k = 0.055
-                tx, ty, tw, th = ret['template_target_xywh'].copy()
-                tw *= ret['template_cropprd_resized_ratio']
-                th *= ret['template_cropprd_resized_ratio']
 
-                anchors = ret['anchors'].copy()
-                w = anchors[:,2] * np.exp(reg_pred[:, 2].cpu().detach().numpy())
-                h = anchors[:,3] * np.exp(reg_pred[:, 3].cpu().detach().numpy())
+            if steps%499 == 0:
+                # ++++++++++++ post process below just for debug ++++++++++++++++++++++++
+                # ++++++++++++++++++++ v1.0 add penalty +++++++++++++++++++++++++++++++++
+                # if ret['pos_anchors'] is not None:
+                #     penalty_k = 0.055
+                #     tx, ty, tw, th = ret['template_target_xywh'].copy()
+                #     tw *= ret['template_cropprd_resized_ratio']
+                #     th *= ret['template_cropprd_resized_ratio']
+                #
+                #     anchors = ret['anchors'].copy()
+                #     w = anchors[:,2] * np.exp(reg_pred[:, 2].cpu().detach().numpy())
+                #     h = anchors[:,3] * np.exp(reg_pred[:, 3].cpu().detach().numpy())
+                #
+                #     eps = 1e-2
+                #     change_w = np.maximum(w/(tw+eps), tw/(w+eps))
+                #     change_h = np.maximum(h/(th+eps), th/(h+eps))
+                #     penalty = np.exp(-(change_w + change_h - 1) * penalty_k)
+                #     pscore = score * penalty
+                # else:
+                #     pscore = score
 
-                eps = 1e-2
-                change_w = np.maximum(w/(tw+eps), tw/(w+eps))
-                change_h = np.maximum(h/(th+eps), th/(h+eps))
-                penalty = np.exp(-(change_w + change_h - 1) * penalty_k)
-                pscore = score * penalty
-            else:
+                # +++++++++ do not penalize the size change +++++++++++
                 pscore = score
 
-            # +++++++++++++++++++ v1.0 add window default cosine ++++++++++++++++++++++
-            score_size = 17
-            window_influence = 0.42
-            window = (np.outer(np.hanning(score_size), np.hanning(score_size)).reshape(17,17,1) + np.zeros((1, 1, 5))).reshape(-1)
-            pscore = pscore * (1 - window_influence) + window * window_influence
-            score_old = score
-            score = pscore #from 0.2 - 0.7
+                # +++++++++++++++++++ v1.0 add window default cosine ++++++++++++++++++++++
+                # score_size = 17
+                # window_influence = 0.42
+                # window = (np.outer(np.hanning(score_size), np.hanning(score_size)).reshape(17,17,1) + np.zeros((1, 1, 5))).reshape(-1)
+                # pscore = pscore * (1 - window_influence) + window * window_influence
+                # score_old = score
+                # score = pscore #from 0.2 - 0.7
 
-            # +++++++++++++++++++ v1.0 add nms ++++++++++++++++++++++++++++++++++++++++++++
-            nms = False
-            nms_threshold = 0.6
-            start = time.time()
-            anchors = ret['anchors'].copy()
-            x = anchors[:,0] + anchors[:, 2] * reg_pred[:, 0].cpu().detach().numpy()
-            y = anchors[:,1] + anchors[:, 3] * reg_pred[:, 1].cpu().detach().numpy()
-            w = anchors[:,2] * np.exp(reg_pred[:, 2].cpu().detach().numpy())
-            h = anchors[:,3] * np.exp(reg_pred[:, 3].cpu().detach().numpy())
-            x1 = np.clip(x-w//2, 0, 256)
-            x2 = np.clip(x+w//2, 0, 256)
-            x3 = np.clip(x+w//2, 0, 256)
-            x4 = np.clip(x-w//2, 0, 256)
-            y1 = np.clip(y-h//2, 0, 256)
-            y2 = np.clip(y-h//2, 0, 256)
-            y3 = np.clip(y+h//2, 0, 256)
-            y4 = np.clip(y+h//2, 0, 256)
-            slist = map(reshape, [x1, y1, x2, y2, x3, y3, x4, y4, score])
-            s = np.hstack(slist)
-            maxscore = max(s[:, 8])
-            if nms and maxscore > nms_threshold:
-                proposals = standard_nms(s, nms_threshold)
-                proposals = proposals if proposals.shape[0] != 0 else s
-                print('nms spend {:.2f}ms'.format(1000*(time.time()-start)))
-            else:
-                proposals = s
-            # ++++++++++++++++++++ debug for class ++++++++++++++++++++++++++++++++++++
-            # print(score[pos_index])  # this should tend to be 1
-            # print(score[neg_index])  # this should tend to be 0
+                # +++++++++++++++++++ v1.0 add nms ++++++++++++++++++++++++++++++++++++++++++++
+                nms = False
+                nms_threshold = 0.6
+                start = time.time()
+                anchors = ret['anchors'].copy()
+                x = anchors[:,0] + anchors[:, 2] * reg_pred[:, 0].cpu().detach().numpy()
+                y = anchors[:,1] + anchors[:, 3] * reg_pred[:, 1].cpu().detach().numpy()
+                w = anchors[:,2] * np.exp(reg_pred[:, 2].cpu().detach().numpy())
+                h = anchors[:,3] * np.exp(reg_pred[:, 3].cpu().detach().numpy())
+                x1 = np.clip(x-w//2, 0, 256)
+                x2 = np.clip(x+w//2, 0, 256)
+                x3 = np.clip(x+w//2, 0, 256)
+                x4 = np.clip(x-w//2, 0, 256)
+                y1 = np.clip(y-h//2, 0, 256)
+                y2 = np.clip(y-h//2, 0, 256)
+                y3 = np.clip(y+h//2, 0, 256)
+                y4 = np.clip(y+h//2, 0, 256)
+                slist = map(reshape, [x1, y1, x2, y2, x3, y3, x4, y4, score])
+                s = np.hstack(slist)
+                maxscore = max(s[:, 8])
+                if nms and maxscore > nms_threshold:
+                    proposals = standard_nms(s, nms_threshold)
+                    proposals = proposals if proposals.shape[0] != 0 else s
+                    print('nms spend {:.2f}ms'.format(1000*(time.time()-start)))
+                else:
+                    proposals = s
+                # ++++++++++++++++++++ debug for class ++++++++++++++++++++++++++++++++++++
+                # print(score[pos_index])  # this should tend to be 1
+                # print(score[neg_index])  # this should tend to be 0
 
 
-            # ++++++++++++++++++++ debug for reg ++++++++++++++++++++++++++++++++++++++
-            tmp_dir = '/home/song/srpn/tmp/visualization/7_check_train_phase_debug_pos_anchors'
-            if not os.path.exists(tmp_dir):
-                os.makedirs(tmp_dir)
-            detection = ret['detection_cropped_resized'].copy()
-            draw = ImageDraw.Draw(detection)
-            pos_anchors = ret['pos_anchors'].copy() if ret['pos_anchors'] is not None else None
-            
-            if pos_anchors is not None:
-                # draw pos anchors
-                x = pos_anchors[:, 0]
-                y = pos_anchors[:, 1]
-                w = pos_anchors[:, 2]
-                h = pos_anchors[:, 3]
-                x1s, y1s, x2s, y2s = x - w//2, y - h//2, x + w//2, y + h//2
-                for i in range(16):
-                    x1, y1, x2, y2 = x1s[i], y1s[i], x2s[i], y2s[i]
-                    draw.line([(x1, y1), (x2, y1), (x2, y2), (x1, y2), (x1, y1)], width=1, fill='white') # pos anchor
+                # ++++++++++++++++++++ debug for reg ++++++++++++++++++++++++++++++++++++++
+                tmp_dir = '../tmp/visualization/match'
+                if not os.path.exists(tmp_dir):
+                    os.makedirs(tmp_dir)
+                template = ret['template_cropped_transformed'].copy()
+                detection = ret['detection_cropped_transformed'].copy()
+                draw = ImageDraw.Draw(detection)
+                pos_anchors = ret['pos_anchors'].copy() if ret['pos_anchors'] is not None else None
 
-                # pos anchor transform to red box after prediction
-                x = pos_anchors[:,0] + pos_anchors[:, 2] * reg_pred[pos_index, 0].cpu().detach().numpy()
-                y = pos_anchors[:,1] + pos_anchors[:, 3] * reg_pred[pos_index, 1].cpu().detach().numpy()
-                w = pos_anchors[:,2] * np.exp(reg_pred[pos_index, 2].cpu().detach().numpy())
-                h = pos_anchors[:,3] * np.exp(reg_pred[pos_index, 3].cpu().detach().numpy())
-                x1s, y1s, x2s, y2s = x - w//2, y - h//2, x + w//2, y + h//2
-                for i in range(16):
-                    x1, y1, x2, y2 = x1s[i], y1s[i], x2s[i], y2s[i]
-                    draw.line([(x1, y1), (x2, y1), (x2, y2), (x1, y2), (x1, y1)], width=1, fill='red')  # predict(white -> red)
-                
-                # pos anchor should be transformed to green gt box, if red and green is same, it is overfitting
-                x = pos_anchors[:,0] + pos_anchors[:, 2] * reg_target[pos_index, 0].cpu().detach().numpy()
-                y = pos_anchors[:,1] + pos_anchors[:, 3] * reg_target[pos_index, 1].cpu().detach().numpy()
-                w = pos_anchors[:,2] * np.exp(reg_target[pos_index, 2].cpu().detach().numpy())
-                h = pos_anchors[:,3] * np.exp(reg_target[pos_index, 3].cpu().detach().numpy())
-                x1s, y1s, x2s, y2s = x - w//2, y-h//2, x + w//2, y + h//2
-                for i in range(16):
-                    x1, y1, x2, y2 = x1s[i], y1s[i], x2s[i], y2s[i]
-                    draw.line([(x1, y1), (x2, y1), (x2, y2), (x1, y2), (x1, y1)], width=1, fill='green') # gt  (white -> green)
-                x1, y1, x3, y3 = x1s[0], y1s[0], x2s[0], y2s[0]
-            else:
-                x1, y1, x3, y3 = 0, 0, 0, 0
-            # top1 proposal after nms (white)
-            if nms:
+                if pos_anchors is not None:
+                    # draw pos anchors
+                    x = pos_anchors[:, 0]
+                    y = pos_anchors[:, 1]
+                    w = pos_anchors[:, 2]
+                    h = pos_anchors[:, 3]
+                    x1s, y1s, x2s, y2s = x - w//2, y - h//2, x + w//2, y + h//2
+                    for i in range(16):
+                        x1, y1, x2, y2 = x1s[i], y1s[i], x2s[i], y2s[i]
+                        draw.line([(x1, y1), (x2, y1), (x2, y2), (x1, y2), (x1, y1)], width=1, fill='white') # pos anchor
+
+                    # pos anchor transform to red box after prediction
+                    x = pos_anchors[:,0] + pos_anchors[:, 2] * reg_pred[pos_index, 0].cpu().detach().numpy()
+                    y = pos_anchors[:,1] + pos_anchors[:, 3] * reg_pred[pos_index, 1].cpu().detach().numpy()
+                    w = pos_anchors[:,2] * np.exp(reg_pred[pos_index, 2].cpu().detach().numpy())
+                    h = pos_anchors[:,3] * np.exp(reg_pred[pos_index, 3].cpu().detach().numpy())
+                    x1s, y1s, x2s, y2s = x - w//2, y - h//2, x + w//2, y + h//2
+                    for i in range(16):
+                        x1, y1, x2, y2 = x1s[i], y1s[i], x2s[i], y2s[i]
+                        draw.line([(x1, y1), (x2, y1), (x2, y2), (x1, y2), (x1, y1)], width=1, fill='red')  # predict(white -> red)
+
+                    # pos anchor should be transformed to green gt box, if red and green is same, it is overfitting
+                    x = pos_anchors[:,0] + pos_anchors[:, 2] * reg_target[pos_index, 0].cpu().detach().numpy()
+                    y = pos_anchors[:,1] + pos_anchors[:, 3] * reg_target[pos_index, 1].cpu().detach().numpy()
+                    w = pos_anchors[:,2] * np.exp(reg_target[pos_index, 2].cpu().detach().numpy())
+                    h = pos_anchors[:,3] * np.exp(reg_target[pos_index, 3].cpu().detach().numpy())
+                    x1s, y1s, x2s, y2s = x - w//2, y-h//2, x + w//2, y + h//2
+                    for i in range(16):
+                        x1, y1, x2, y2 = x1s[i], y1s[i], x2s[i], y2s[i]
+                        draw.line([(x1, y1), (x2, y1), (x2, y2), (x1, y2), (x1, y1)], width=1, fill='blue') # gt  (white -> blue)
+                    x1, y1, x3, y3 = x1s[0], y1s[0], x2s[0], y2s[0]
+                else:
+                    x1, y1, x3, y3 = 0, 0, 0, 0
+                # top1 proposal after nms (white)
                 index = np.argsort(proposals[:, 8])[::-1][0]
                 x1, y1, x2, y2, x3, y3, x4, y4, _ = proposals[index]
                 draw.line([(x1, y1), (x2, y2), (x3, y3), (x4, y4), (x1, y1)], width=3, fill='yellow')
-            save_path = osp.join(tmp_dir, 'epoch_{:010d}_{:010d}_anchor_pred.jpg'.format(epoch, example))
-            detection.save(save_path)
+                save_detection_path = osp.join(tmp_dir, 'epoch_{:010d}_{:010d}_anchor_pred.jpg'.format(epoch, example))
+                save_template_path = osp.join(tmp_dir, 'epoch_{:010d}_{:010d}_template.jpg'.format(epoch, example))
+                detection.save(save_detection_path)
+                template.save(save_template_path)
 
-            
-            # +++++++++++++++++++ v1.0 restore ++++++++++++++++++++++++++++++++++++++++
-            ratio = ret['detection_cropped_resized_ratio']
-            detection_cropped = ret['detection_cropped'].copy()
-            detection_cropped_resized = ret['detection_cropped_resized'].copy()
-            original = Image.open(ret['detection_img_path'])
-            x_, y_ = ret['detection_tlcords_of_original_image']
-            draw = ImageDraw.Draw(original)
-            w, h = original.size
-            """ un resized """
-            x1, y1, x3, y3 = x1/ratio, y1/ratio, y3/ratio, y3/ratio
 
-            """ un cropped """
-            x1 = np.clip(x_ + x1, 0, w-1).astype(np.int32) # uncropped #target_of_original_img
-            y1 = np.clip(y_ + y1, 0, h-1).astype(np.int32)
-            x3 = np.clip(x_ + x3, 0, w-1).astype(np.int32)
-            y3 = np.clip(y_ + y3, 0, h-1).astype(np.int32)
+                # +++++++++++++++++++ v1.0 restore ++++++++++++++++++++++++++++++++++++++++
+                ratio = ret['detection_cropped_resized_ratio']
+                detection_cropped = ret['detection_cropped'].copy()
+                detection_cropped_resized = ret['detection_cropped_resized'].copy()
+                original = Image.open(ret['detection_img_path'])
+                x_, y_ = ret['detection_tlcords_of_original_image']
+                draw = ImageDraw.Draw(original)
+                w, h = original.size
+                """ un resized """
+                x1, y1, x3, y3 = x1/ratio, y1/ratio, x3/ratio, y3/ratio
 
-            draw.line([(x1, y1), (x3, y1), (x3, y3), (x1, y3), (x1, y1)], width=3, fill='yellow')
-            save_path = osp.join(tmp_dir, 'epoch_{:010d}_{:010d}_restore.jpg'.format(epoch, example))
-            original.save(save_path)
-            
-            print("Epoch:{:04d}\texample:{:06d}/{:06d}({:.2f})%\tsteps:{:010d}\tlr:{:.7f}\tcloss:{:.4f}\trloss:{:.4f}\ttloss:{:.4f}".format(epoch, example+1, args.max_batches, 100*(example+1)/args.max_batches, steps, cur_lr, closses.avg, rlosses.avg, tlosses.avg ))
+                """ un cropped """
+                x1 = np.clip(x_ + x1, 0, w-1).astype(np.int32) # uncropped #target_of_original_img
+                y1 = np.clip(y_ + y1, 0, h-1).astype(np.int32)
+                x3 = np.clip(x_ + x3, 0, w-1).astype(np.int32)
+                y3 = np.clip(y_ + y3, 0, h-1).astype(np.int32)
 
-        if steps % 10000 == 0:
-            file_path = os.path.join(args.weight_dir, 'weights-{:07d}.pth.tar'.format(steps))
-            state = {
-            'epoch' :epoch+1,
-            'state_dict' :model.state_dict(),
-            'optimizer' : optimizer.state_dict(),
-            }
-            torch.save(state, file_path)
+                draw.line([(x1, y1), (x3, y1), (x3, y3), (x1, y3), (x1, y1)], width=3, fill='yellow')
+                save_path = osp.join(tmp_dir, 'epoch_{:010d}_{:010d}_restore.jpg'.format(epoch, example))
+                original.save(save_path)
+
+                print("Epoch:{:04d}\texample:{:06d}/{:06d}({:.2f})%\tsteps:{:010d}\tlr:{:.7f}\tcloss:{:.4f}\trloss:{:.4f}\ttloss:{:.4f}".format(epoch, example+1, args.max_batches, 100*(example+1)/args.max_batches, steps, cur_lr, closses.avg, rlosses.avg, tlosses.avg ))
+
+
+        file_path = os.path.join(args.weight_dir, 'weights-{:04d}.pth.tar'.format(epoch))
+        state = {
+        'epoch' :epoch+1,
+        'state_dict' :model.state_dict(),
+        'optimizer' : optimizer.state_dict(),
+        }
+        torch.save(state, file_path)
 
 def intersection(g, p):
     g = Polygon(g[:8].reshape((4, 2)))
@@ -315,7 +322,7 @@ class MultiBoxLoss(nn.Module):
         super(MultiBoxLoss, self).__init__()
 
     def forward(self, predictions, targets):
-        print('+++++++++++++++++++++++++++++++++++++++++++++++++++')
+        # print('+++++++++++++++++++++++++++++++++++++++++++++++++++')
         cout, rout = predictions
         """ class """
         class_pred, class_target = cout, targets[:, 0].long()
@@ -355,7 +362,7 @@ class AverageMeter(object):
 
 def adjust_learning_rate(lr, optimizer, epoch, gamma=0.1):
     """Sets the learning rate to the initial LR decayed 0.9 every 50 epochs"""
-    lr = lr * (0.9 ** (epoch // 1))
+    lr = lr * (0.98 ** (epoch // 1))
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
     return lr
