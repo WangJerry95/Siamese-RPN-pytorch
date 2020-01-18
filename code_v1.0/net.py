@@ -12,18 +12,18 @@ model_urls = {'alexnet': 'https://download.pytorch.org/models/alexnet-owt-4df8aa
 class SiameseRPN(nn.Module):
     def __init__(self, test_video=False):
         super(SiameseRPN, self).__init__()
-        self.features = nn.Sequential(                  #1, 3, 256, 256
-            nn.Conv2d(3, 64, kernel_size=11, stride=2), #1, 64,123, 123
+        self.features = nn.Sequential(                  #1, 3, 325, 325
+            nn.Conv2d(3, 64, kernel_size=11, stride=2), #1, 64,158, 158
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=3, stride=2),      #1, 64, 60,  60
-            nn.Conv2d(64, 192, kernel_size=5),          #1,192, 56,  56
+            nn.MaxPool2d(kernel_size=3, stride=2),      #1, 64, 78,  78
+            nn.Conv2d(64, 192, kernel_size=5),          #1,192, 74,  74
             nn.ReLU(inplace=True),
-            nn.MaxPool2d(kernel_size=3, stride=2),      #1,192, 27,  27
-            nn.Conv2d(192, 384, kernel_size=3),         #1,384, 25,  25 
+            nn.MaxPool2d(kernel_size=3, stride=2),      #1,192, 36,  36
+            nn.Conv2d(192, 384, kernel_size=3),         #1,384, 34,  34
             nn.ReLU(inplace=True),
-            nn.Conv2d(384, 256, kernel_size=3),         #1,256, 23,  23
+            nn.Conv2d(384, 256, kernel_size=3),         #1,256, 32,  32
             nn.ReLU(inplace=True),
-            nn.Conv2d(256, 256, kernel_size=3),         #1,256, 21,  21
+            nn.Conv2d(256, 256, kernel_size=3),         #1,256, 30,  30
         )
         
         self.k = 5
@@ -80,7 +80,7 @@ if __name__ == '__main__':
     model = SiameseRPN()
 
     template = torch.ones((1, 3, 127, 127))
-    detection= torch.ones((1, 3, 256, 256))
+    detection= torch.ones((1, 3, 325, 325))
 
     y1, y2 = model(template, detection)
     print(y1.shape) #[1, 10, 17, 17]

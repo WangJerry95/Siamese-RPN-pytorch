@@ -46,7 +46,7 @@ parser.add_argument('--debug', default=False, type=bool,  help='whether to debug
 def main():
     """ train dataloader """
     args = parser.parse_args()
-    data_loader = TrainDataLoader(args.train_path, check=args.debug)
+    data_loader = TrainDataLoader(args.train_path, check=args.debug, out_feature=25)
     if not os.path.exists(args.weight_dir):
         os.makedirs(args.weight_dir)
 
@@ -177,7 +177,7 @@ def main():
 
 
                 # ++++++++++++++++++++ debug for reg ++++++++++++++++++++++++++++++++++++++
-                tmp_dir = '../tmp/visualization/match'
+                tmp_dir = '../tmp/visualization/match_extend'
                 if not os.path.exists(tmp_dir):
                     os.makedirs(tmp_dir)
                 template = ret['template_cropped_transformed'].copy()
@@ -215,7 +215,7 @@ def main():
                     for i in range(16):
                         x1, y1, x2, y2 = x1s[i], y1s[i], x2s[i], y2s[i]
                         draw.line([(x1, y1), (x2, y1), (x2, y2), (x1, y2), (x1, y1)], width=1, fill='blue') # gt  (white -> blue)
-                    x1, y1, x3, y3 = x1s[0], y1s[0], x2s[0], y2s[0]
+                    x1_g, y1_g, x3_g, y3_g = x1s[0], y1s[0], x2s[0], y2s[0]
                 else:
                     x1, y1, x3, y3 = 0, 0, 0, 0
                 # top1 proposal after nms (white)
@@ -230,22 +230,26 @@ def main():
 
                 # +++++++++++++++++++ v1.0 restore ++++++++++++++++++++++++++++++++++++++++
                 ratio = ret['detection_cropped_resized_ratio']
-                detection_cropped = ret['detection_cropped'].copy()
-                detection_cropped_resized = ret['detection_cropped_resized'].copy()
                 original = Image.open(ret['detection_img_path'])
                 x_, y_ = ret['detection_tlcords_of_original_image']
                 draw = ImageDraw.Draw(original)
                 w, h = original.size
                 """ un resized """
                 x1, y1, x3, y3 = x1/ratio, y1/ratio, x3/ratio, y3/ratio
+                x1_g, y1_g, x3_g, y3_g = x1_g / ratio, y1_g / ratio, x3_g / ratio, y3_g / ratio
 
                 """ un cropped """
                 x1 = np.clip(x_ + x1, 0, w-1).astype(np.int32) # uncropped #target_of_original_img
                 y1 = np.clip(y_ + y1, 0, h-1).astype(np.int32)
                 x3 = np.clip(x_ + x3, 0, w-1).astype(np.int32)
                 y3 = np.clip(y_ + y3, 0, h-1).astype(np.int32)
+                x1_g = np.clip(x_ + x1_g, 0, w-1).astype(np.int32) # uncropped #target_of_original_img
+                y1_g = np.clip(y_ + y1_g, 0, h-1).astype(np.int32)
+                x3_g = np.clip(x_ + x3_g, 0, w-1).astype(np.int32)
+                y3_g = np.clip(y_ + y3_g, 0, h-1).astype(np.int32)
 
                 draw.line([(x1, y1), (x3, y1), (x3, y3), (x1, y3), (x1, y1)], width=3, fill='yellow')
+                draw.line([(x1_g, y1_g), (x3_g, y1_g), (x3_g, y3_g), (x1_g, y3_g), (x1_g, y1_g)], width=3, fill='blue')
                 save_path = osp.join(tmp_dir, 'epoch_{:010d}_{:010d}_restore.jpg'.format(epoch, example))
                 original.save(save_path)
 

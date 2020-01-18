@@ -191,10 +191,10 @@ class TrainDataLoader(object):
             # cords_of_detection_abs = [abs(int(float(i))) for i in lines[detection_index].strip('\n').split(',')[:4]]
 
             # randomly choose a template area
-            target_w = random.uniform(100, 150)
-            target_h = random.uniform(100, 150)
+            target_w = random.uniform(80, 120)
+            target_h = random.uniform(80, 120)
             target_x = random.uniform(0, 320 - target_w)
-            target_y = random.uniform(0, 240 - target_h)
+            target_y = random.uniform(0, 320 - target_h)
             cords_of_template_abs = [target_x, target_y, target_w, target_h]
             cords_of_detection_abs = cords_of_template_abs
             if cords_of_template_abs[2]*cords_of_template_abs[3]*cords_of_detection_abs[2]*cords_of_detection_abs[3] != 0: 
@@ -244,8 +244,8 @@ class TrainDataLoader(object):
         # p = round((tw + th)/2, 2)
         # template_square_size  = int(np.sqrt((tw + p)*(th + p))) #a
         template_square_size = int(max(tw, th))  # do not expand too much
-        detection_square_size = int(template_square_size * 2)   #A =2a
-        
+        search_rate = random.uniform(2.5, 2.7)
+        detection_square_size = int(template_square_size * search_rate)   #A =2a
         # pad
         offset = [random.uniform(-32, 32), random.uniform(-32, 32)]  # offset of the search area center from the target center
         detection_lt_x, detection_lt_y = cx - detection_square_size//2 + offset[0], cy - detection_square_size//2 + offset[1]
@@ -282,9 +282,9 @@ class TrainDataLoader(object):
         
         # resize
         self.ret['template_cropped_resized'] = self.ret['template_cropped'].copy().resize((127, 127))
-        self.ret['detection_cropped_resized']= self.ret['detection_cropped'].copy().resize((256, 256))
+        self.ret['detection_cropped_resized']= self.ret['detection_cropped'].copy().resize((325, 325))
         self.ret['template_cropprd_resized_ratio'] = round(127/template_square_size, 2)
-        self.ret['detection_cropped_resized_ratio'] = round(256/detection_square_size, 2)
+        self.ret['detection_cropped_resized_ratio'] = round(325/detection_square_size, 2)
         
         # compute target in detection, and then we will compute IOU
         # whether target in detection part
